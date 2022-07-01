@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -13,6 +12,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+func ValidateConfig(config bson.M) error {
+	value, ok := config["Team"]
+	if !ok || value == "" {
+		return fmt.Errorf("cannot find property team")
+	}
+	value, ok = config["Name"]
+	if !ok || value == "" {
+		return fmt.Errorf("cannot find property name")
+	}
+	return nil
+}
 
 func Authenticate(c *gin.Context) {
 	user, password, ok := c.Request.BasicAuth()
@@ -174,25 +185,13 @@ func SetmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	structure := TeamConfig{}
-	ref := reflect.TypeOf(structure)
-	refM := reflect.ValueOf(configM).MapKeys()
-	for in := 0; in < len(refM); in++ {
-		valid := false
-		for i := 0; i < ref.NumField(); i++ {
-			if refM[in].String() == ref.Field(i).Name {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			message := fmt.Sprintf("Cannot validate field: %s", refM[in].String())
-			c.IndentedJSON(424, httpresponse{Status: false, Message: message})
-			c.Abort()
-			return
-		}
-	}
 	configM["Team"] = team
+	err = ValidateConfig(configM)
+	if err != nil {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprintf("Error: %s", err)})
+		c.Abort()
+		return
+	}
 	err = SetTeamConfig(configM, ConfigDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
@@ -210,13 +209,33 @@ func SetmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	c.IndentedJSON(200, httpresponse{Status: true, Message: ""})
+	updatedConfig, err := GetSingleTeamConfig(fmt.Sprint(configM["Team"]), fmt.Sprint(configM["Name"]), ConfigDBConf)
+	if err != nil {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
+		c.Abort()
+		return
+	}
+	updatedBytes, err := json.Marshal(updatedConfig)
+	if err != nil {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
+		c.Abort()
+		return
+	}
+	err = json.Unmarshal(updatedBytes, &configM)
+	if err != nil {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
+		c.Abort()
+		return
+	}
 	configM["UpdateType"] = "Update"
 	configM["UpdateTime"] = time.Now()
 	err = SendMessage(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
 	if err != nil {
-		log.Println(err)
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
+		c.Abort()
+		return
 	}
+	c.IndentedJSON(200, httpresponse{Status: true, Message: ""})
 }
 
 func RemovemyConfig(c *gin.Context) {
