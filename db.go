@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -47,6 +46,27 @@ func GetTeamConfig(team string, config DBConfig) ([]TeamConfig, error) {
 		slice = append(slice, structure)
 	}
 	return slice, nil
+}
+
+func GetSingleTeamConfig(team string, configName string, config DBConfig) (TeamConfig, error) {
+	myconfig := TeamConfig{}
+	filter := bson.M{
+		"Team": team,
+		"Name": configName,
+	}
+	doc, err := GetMongoDoc(filter, config)
+	if err != nil {
+		return myconfig, err
+	}
+	bytes, err := bson.Marshal(doc[0])
+	if err != nil {
+		return myconfig, err
+	}
+	err = bson.Unmarshal(bytes, &myconfig)
+	if err != nil {
+		return myconfig, err
+	}
+	return myconfig, nil
 }
 
 func AddTeamConfig(tc TeamConfig, dbconfig DBConfig) error {
@@ -179,36 +199,18 @@ func SetMongoDoc(doc bson.M, config DBConfig) error {
 	defer client.Disconnect(ctx)
 	Database := client.Database(config.Database)
 	Collection := Database.Collection(config.Collection)
-	update := bson.D{}
-	filter := bson.M{}
-	mapKeys := reflect.ValueOf(doc).MapKeys()
-	for i := 0; i < len(mapKeys); i++ {
-		key := mapKeys[i].String()
-		value := doc[key]
-		if key == "Name" && value == "" {
-			return errors.New("name field cannot be null")
-		} else if key == "Name" {
-			filter = bson.M{"Name": value}
-		} else {
-			item := bson.D{
-				{Key: key, Value: value},
-			}
-			update = append(update, item...)
-		}
-	}
+	filter := bson.M{"Name": doc["Name"]}
 	updateeResult, err := Collection.UpdateOne(
 		ctx,
 		filter,
 		bson.D{
-			{Key: "$set", Value: update},
+			{Key: "$set", Value: doc},
 		},
 	)
 	if err != nil {
 		return err
 	}
-	if updateeResult.MatchedCount > 0 && updateeResult.ModifiedCount == 0 {
-		return errors.New("nothing to update")
-	} else if updateeResult.MatchedCount == 0 {
+	if updateeResult.MatchedCount == 0 {
 		return errors.New("no document found to update")
 	}
 	return nil
