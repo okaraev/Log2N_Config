@@ -55,6 +55,7 @@ func getEnvs() error {
 	userCol := os.Getenv("userCol")
 	QCS := os.Getenv("QCS")
 	QName := os.Getenv("QName")
+	QServerAddress := os.Getenv("QServerAddress")
 	if configDB == "" {
 		return fmt.Errorf("cannot get environment variable configdb")
 	}
@@ -79,6 +80,9 @@ func getEnvs() error {
 	if QName == "" {
 		return fmt.Errorf("cannot get environment variable qname")
 	}
+	if QServerAddress == "" {
+		return fmt.Errorf("cannot get environment variable qserveraddress")
+	}
 	configdbcsbytes, err := os.ReadFile(ConfigDBCS)
 	if err != nil {
 		return err
@@ -96,7 +100,8 @@ func getEnvs() error {
 	if err != nil {
 		return err
 	}
-	QConnectionString := strings.Split(string(qcsbytes), "\n")[0]
+	QUserPass := strings.Split(string(qcsbytes), "\n")[0]
+	QConnectionString := fmt.Sprintf("amqp://%s@%s", QUserPass, QServerAddress)
 	GlobalConfig.DBConf = dbconf
 	GlobalConfig.QConnectionString = QConnectionString
 	GlobalConfig.QName = QName
