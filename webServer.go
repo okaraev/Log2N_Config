@@ -34,7 +34,6 @@ func Authenticate(c *gin.Context) {
 	}
 	userAccount, err := GetTeamUser(user, UserDBConf)
 	if err != nil || userAccount.Password != GetHash(password) {
-		fmt.Printf("User: %s, Account Password: %s\n", userAccount.Name, userAccount.Password)
 		if err != nil {
 			log.Println(err)
 		}
