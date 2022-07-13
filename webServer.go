@@ -160,9 +160,12 @@ func AddmyConfig(c *gin.Context) {
 	configM["Team"] = team
 	configM["UpdateType"] = "Add"
 	configM["UpdateTime"] = time.Now()
-	err = SendMessage(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
+	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
 	if err != nil {
 		log.Println(err)
+		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
+		c.Abort()
+		return
 	}
 }
 
@@ -228,9 +231,10 @@ func SetmyConfig(c *gin.Context) {
 	}
 	configM["UpdateType"] = "Update"
 	configM["UpdateTime"] = time.Now()
-	err = SendMessage(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
+	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
 	if err != nil {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
+		log.Println(err)
+		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
 		c.Abort()
 		return
 	}
@@ -280,9 +284,12 @@ func RemovemyConfig(c *gin.Context) {
 	configM["Team"] = team
 	configM["UpdateType"] = "Delete"
 	configM["UpdateTime"] = time.Now()
-	err = SendMessage(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
+	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
 	if err != nil {
 		log.Println(err)
+		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
+		c.Abort()
+		return
 	}
 }
 
