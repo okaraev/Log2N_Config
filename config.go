@@ -12,6 +12,7 @@ import (
 var GlobalConfig webconfig
 var UserDBConf DBConfig
 var ConfigDBConf DBConfig
+var myBreaker Breaker
 
 type httpresponse struct {
 	Status  bool
@@ -125,6 +126,7 @@ func main() {
 		err := ValidateDBConfig(dbconf)
 		throw(err)
 	}
+	myBreaker.New(SendMessage)
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/api/1/config", Authenticate, GetmyConfig)
