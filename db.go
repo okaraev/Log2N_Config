@@ -96,31 +96,34 @@ func GetDocument(filter interface{}, dbconfig DBConfig) (bson.A, error) {
 }
 
 func GetSingleDocument(filter interface{}, dbconfig DBConfig) (bson.M, error) {
+	result := bson.M{}
 	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
 	if err != nil {
-		return bson.M{}, err
+		return result, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	err = client.Connect(ctx)
 	if err != nil {
-		return bson.M{}, err
+		return result, err
 	}
 	defer client.Disconnect(ctx)
 	Database := client.Database(dbconfig.Database)
 	Collection := Database.Collection(dbconfig.Collection)
-	configs, err := Collection.Find(ctx, filter)
+	configs := Collection.FindOne(ctx, filter)
 	if err != nil {
-		panic(err)
+		return result, err
 	}
-	defer configs.Close(ctx)
-	returnObject := bson.M{}
-	err = configs.All(ctx, &returnObject)
+	err = configs.Err()
 	if err != nil {
-		return bson.M{}, err
+		return result, err
+	}
+	err = configs.Decode(result)
+	if err != nil {
+		return result, err
 	}
 	cancel()
-	return returnObject, nil
+	return result, nil
 }
 
 func SetDocument(filter interface{}, update interface{}, dbconfig DBConfig) error {
