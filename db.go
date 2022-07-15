@@ -86,14 +86,6 @@ func AddTeamConfig(tc TeamConfig, dbconfig DBConfig) error {
 	return nil
 }
 
-func SetTeamConfig(TC bson.M, config DBConfig) error {
-	err := SetMongoDoc(TC, config)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func RemoveTeamConfig(configName string, config DBConfig) error {
 	filter := bson.M{"Name": configName}
 	err := RemoveMongoDoc(filter, config)
@@ -359,6 +351,40 @@ func SetDocument(filter interface{}, update interface{}, dbconfig DBConfig) erro
 		return fmt.Errorf("no document to update")
 	}
 	return nil
+}
+
+func SetGetDocument(filter interface{}, update interface{}, dbconfig DBConfig) (bson.M, error) {
+	result := bson.M{}
+	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
+	if err != nil {
+		return result, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err = client.Connect(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer client.Disconnect(ctx)
+	Database := client.Database(dbconfig.Database)
+	Collection := Database.Collection(dbconfig.Collection)
+	var ReturnDocument options.ReturnDocument = 1
+	myOptions := options.FindOneAndUpdateOptions{ReturnDocument: &ReturnDocument}
+	updateResult := Collection.FindOneAndUpdate(
+		ctx,
+		filter,
+		update,
+		&myOptions,
+	)
+	err = updateResult.Err()
+	if err != nil {
+		return result, err
+	}
+	err = updateResult.Decode(result)
+	if err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func AddDocument(document interface{}, dbconfig DBConfig) error {
