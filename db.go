@@ -67,32 +67,32 @@ func ValidateDBConfig(conf DBConfig) error {
 	return nil
 }
 
-func GetDocument(filter interface{}, dbconfig DBConfig) (bson.A, error) {
+func GetDocument(filter interface{}, dbconfig DBConfig) ([]bson.M, error) {
 	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
+	result := []bson.M{}
 	if err != nil {
-		return bson.A{}, err
+		return result, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	err = client.Connect(ctx)
 	if err != nil {
-		return bson.A{}, err
+		return result, err
 	}
 	defer client.Disconnect(ctx)
 	Database := client.Database(dbconfig.Database)
 	Collection := Database.Collection(dbconfig.Collection)
 	configs, err := Collection.Find(ctx, filter)
 	if err != nil {
-		panic(err)
+		return result, err
 	}
 	defer configs.Close(ctx)
-	returnObject := bson.A{}
-	err = configs.All(ctx, &returnObject)
+	err = configs.All(ctx, &result)
 	if err != nil {
-		return bson.A{}, err
+		return result, err
 	}
 	cancel()
-	return returnObject, nil
+	return result, nil
 }
 
 func GetSingleDocument(filter interface{}, dbconfig DBConfig) (bson.M, error) {
