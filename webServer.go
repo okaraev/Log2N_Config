@@ -11,6 +11,19 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+func ConverttoTeamConfigs(in interface{}) ([]TeamConfig, error) {
+	configs := []TeamConfig{}
+	bytes, err := bson.Marshal(in)
+	if err != nil {
+		return configs, err
+	}
+	err = bson.Unmarshal(bytes, &configs)
+	if err != nil {
+		return configs, err
+	}
+	return configs, err
+}
+
 func SetConfigValidate(config bson.M) error {
 	value, ok := config["Team"]
 	if !ok || value == "" {
@@ -104,7 +117,12 @@ func GetmyConfig(c *gin.Context) {
 		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
 		return
 	}
-	c.IndentedJSON(200, configs)
+	teamconfigs, err := ConverttoTeamConfigs(configs)
+	if err != nil {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
+		return
+	}
+	c.IndentedJSON(200, teamconfigs)
 }
 
 func AddmyConfig(c *gin.Context) {
