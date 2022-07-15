@@ -194,7 +194,11 @@ func SetmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	err = SetTeamConfig(configM, ConfigDBConf)
+	filter := bson.M{"Team": team, "Name": configM["Name"]}
+	update := bson.D{
+		{Key: "$set", Value: configM},
+	}
+	updatedConfig, err := SetGetDocument(filter, update, ConfigDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "no document found to update" {
@@ -203,17 +207,11 @@ func SetmyConfig(c *gin.Context) {
 			message = "no difference between given and stored configuration"
 		} else {
 			apiuser, _, _ := c.Request.BasicAuth()
-			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: SetTeamConfig, func: SetmyConfig, Message: %s", apiuser, c.Request.Method, configM, message)
+			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: SetTeamConfig, func: SetGetDocument, Message: %s", apiuser, c.Request.Method, configM, message)
 			log.Println(errmessage)
 			message = "Unhandled exception. Please contact to Administrator"
 		}
 		c.IndentedJSON(424, httpresponse{Status: false, Message: message})
-		c.Abort()
-		return
-	}
-	updatedConfig, err := GetSingleTeamConfig(fmt.Sprint(configM["Team"]), fmt.Sprint(configM["Name"]), ConfigDBConf)
-	if err != nil {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
 		c.Abort()
 		return
 	}
