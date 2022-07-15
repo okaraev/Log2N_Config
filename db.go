@@ -304,3 +304,104 @@ func ValidateDBConfig(conf DBConfig) error {
 	}
 	return nil
 }
+
+func GetDocument(filter interface{}, dbconfig DBConfig) (bson.A, error) {
+	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
+	if err != nil {
+		return bson.A{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	err = client.Connect(ctx)
+	if err != nil {
+		return bson.A{}, err
+	}
+	defer client.Disconnect(ctx)
+	Database := client.Database(dbconfig.Database)
+	Collection := Database.Collection(dbconfig.Collection)
+	configs, err := Collection.Find(ctx, filter)
+	if err != nil {
+		panic(err)
+	}
+	defer configs.Close(ctx)
+	returnObject := bson.A{}
+	err = configs.All(ctx, &returnObject)
+	if err != nil {
+		return bson.A{}, err
+	}
+	cancel()
+	return returnObject, nil
+}
+
+func SetDocument(filter interface{}, update interface{}, dbconfig DBConfig) error {
+	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err = client.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Disconnect(ctx)
+	Database := client.Database(dbconfig.Database)
+	Collection := Database.Collection(dbconfig.Collection)
+	updateeResult, err := Collection.UpdateOne(
+		ctx,
+		filter,
+		update,
+	)
+	if err != nil {
+		return err
+	}
+	if updateeResult.MatchedCount == 0 {
+		return fmt.Errorf("no document to update")
+	}
+	return nil
+}
+
+func AddDocument(document interface{}, dbconfig DBConfig) error {
+	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err = client.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Disconnect(ctx)
+	Database := client.Database(dbconfig.Database)
+	Collection := Database.Collection(dbconfig.Collection)
+	_, err = Collection.InsertOne(ctx, document)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func RemoveDocument(filter interface{}, dbconfig DBConfig) error {
+	client, err := mongo.NewClient(options.Client().ApplyURI(dbconfig.Connectionstring))
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err = client.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Disconnect(ctx)
+	Database := client.Database(dbconfig.Database)
+	Collection := Database.Collection(dbconfig.Collection)
+	delResult, err := Collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if delResult.DeletedCount == 0 {
+		return errors.New("nothing to delete")
+	}
+	return nil
+}
