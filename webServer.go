@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"regexp"
@@ -13,11 +14,11 @@ import (
 
 func ConverttoTeamConfigs(in interface{}) ([]TeamConfig, error) {
 	configs := []TeamConfig{}
-	bytes, err := bson.Marshal(in)
+	bytes, err := json.Marshal(in)
 	if err != nil {
 		return configs, err
 	}
-	err = bson.Unmarshal(bytes, &configs)
+	err = json.Unmarshal(bytes, &configs)
 	if err != nil {
 		return configs, err
 	}
