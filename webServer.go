@@ -51,15 +51,16 @@ func Authenticate(c *gin.Context) {
 		c.IndentedJSON(403, httpresponse{Status: false, Message: "Not authecticated"})
 		return
 	}
-	userAccount, err := GetTeamUser(user, UserDBConf)
-	if err != nil || userAccount.Password != GetHash(password) {
+	filter := bson.M{"Name": user}
+	userAccount, err := GetSingleDocument(filter, UserDBConf)
+	if err != nil || userAccount["Password"] != GetHash(password) {
 		if err != nil {
 			log.Println(err)
 		}
 		c.Abort()
 		c.IndentedJSON(403, httpresponse{Status: false, Message: "Not authecticated"})
 	} else {
-		c.Params = append(c.Params, gin.Param{Key: "Team", Value: userAccount.Team})
+		c.Params = append(c.Params, gin.Param{Key: "Team", Value: userAccount["Team"].(string)})
 	}
 }
 
@@ -84,8 +85,9 @@ func PasswordComplexityCheck(password string) bool {
 
 func SystemAuthorize(c *gin.Context) {
 	user, password, _ := c.Request.BasicAuth()
-	userAccount, err := GetTeamUser(user, UserDBConf)
-	if err != nil || userAccount.Team != "System" || userAccount.Password != GetHash(password) {
+	filter := bson.M{"Name": user}
+	userAccount, err := GetSingleDocument(filter, UserDBConf)
+	if err != nil || userAccount["Team"] != "System" || userAccount["Password"] != GetHash(password) {
 		if err != nil {
 			log.Println(err)
 		}
