@@ -38,7 +38,7 @@ func AddUserValidation(user bson.M) error {
 	for _, prop := range []string{"Team", "Name", "Password"} {
 		val, ok := user[prop]
 		if val == "" || !ok {
-			return fmt.Errorf("Team, Name, Password fields cannot be null")
+			return fmt.Errorf("team, name, password fields cannot be null")
 		}
 	}
 	return nil
