@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -13,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-func ValidateConfig(config bson.M) error {
+func SetConfigValidate(config bson.M) error {
 	value, ok := config["Team"]
 	if !ok || value == "" {
 		return fmt.Errorf("cannot find property team")
@@ -21,6 +19,27 @@ func ValidateConfig(config bson.M) error {
 	value, ok = config["Name"]
 	if !ok || value == "" {
 		return fmt.Errorf("cannot find property name")
+	}
+	return nil
+}
+
+func AddConfigValidation(config bson.M) error {
+	props := []string{"LogSeverity", "LogLogic", "Name", "NotificationMethod", "NotificationRecipient"}
+	for _, prop := range props {
+		val, ok := config[prop]
+		if val == "" || !ok {
+			return fmt.Errorf("logseverity, loglogic, name, notificationmethod, notificationrecipient fields cannot be null or empty")
+		}
+	}
+	return nil
+}
+
+func AddUserValidation(user bson.M) error {
+	for _, prop := range []string{"Team", "Name", "Password"} {
+		val, ok := user[prop]
+		if val == "" || !ok {
+			return fmt.Errorf("Team, Name, Password fields cannot be null")
+		}
 	}
 	return nil
 }
@@ -77,35 +96,13 @@ func SystemAuthorize(c *gin.Context) {
 
 func GetmyConfig(c *gin.Context) {
 	team := c.Params.ByName("Team")
-	configs, err := GetTeamConfig(team, ConfigDBConf)
+	filter := bson.M{"Team": team}
+	configs, err := GetDocument(filter, ConfigDBConf)
 	if err != nil {
 		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
 		return
 	}
 	c.IndentedJSON(200, configs)
-}
-
-func GetAllConfigs(c *gin.Context) {
-	isSystemAuthorized := c.Params.ByName("isAuthorized")
-	if isSystemAuthorized == "false" {
-		c.IndentedJSON(403, httpresponse{Status: false, Message: "Not authorized"})
-		return
-	}
-	configs, err := GetTeamConfig("%", ConfigDBConf)
-	if err != nil {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
-		return
-	}
-	c.IndentedJSON(200, configs)
-}
-
-func GetConfigbyTeam(c *gin.Context) {
-	team := c.Param("Team")
-	teamconfigs, err := GetTeamConfig(team, ConfigDBConf)
-	if err != nil {
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": err})
-	}
-	c.IndentedJSON(http.StatusOK, teamconfigs)
 }
 
 func AddmyConfig(c *gin.Context) {
@@ -126,29 +123,22 @@ func AddmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	bytes, err := json.Marshal(configM)
+	err = AddConfigValidation(configM)
 	if err != nil {
-		panic(err)
-	}
-	config := TeamConfig{}
-	err = json.Unmarshal(bytes, &config)
-	if err != nil {
-		panic(err)
-	}
-	config.Team = team
-	if config.LogSeverity == "" || config.LogLogic == "" || config.Name == "" || config.NotificationMethod == "" || config.NotificationRecipient == nil || len(config.NotificationRecipient) == 0 {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: "LogSeverity, LogLogic, Name, NotificationMethod, NotificationRecipient fields cannot be null"})
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprintln(err)})
 		c.Abort()
 		return
 	}
-	err = AddTeamConfig(config, ConfigDBConf)
+	configM["Team"] = team
+
+	err = AddDocument(configM, ConfigDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if strings.Contains(message, "dup key") {
 			message = "Given Configuration Name already exist"
 		} else {
 			apiuser, _, _ := c.Request.BasicAuth()
-			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: AddTeamConfig, func: AddmyConfig, Message: %s", apiuser, c.Request.Method, configM, message)
+			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: AddTeamConfig, func: AddDocument, Message: %s", apiuser, c.Request.Method, configM, message)
 			log.Println(errmessage)
 			message = "Unhandled exception. Please contact to Administrator"
 		}
@@ -157,7 +147,6 @@ func AddmyConfig(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(200, httpresponse{Status: true, Message: ""})
-	configM["Team"] = team
 	configM["UpdateType"] = "Add"
 	configM["UpdateTime"] = time.Now()
 	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
@@ -188,9 +177,9 @@ func SetmyConfig(c *gin.Context) {
 		return
 	}
 	configM["Team"] = team
-	err = ValidateConfig(configM)
+	err = SetConfigValidate(configM)
 	if err != nil {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprintf("Error: %s", err)})
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprintln(err)})
 		c.Abort()
 		return
 	}
@@ -215,21 +204,9 @@ func SetmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	updatedBytes, err := json.Marshal(updatedConfig)
-	if err != nil {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
-		c.Abort()
-		return
-	}
-	err = json.Unmarshal(updatedBytes, &configM)
-	if err != nil {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
-		c.Abort()
-		return
-	}
-	configM["UpdateType"] = "Update"
-	configM["UpdateTime"] = time.Now()
-	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
+	updatedConfig["UpdateType"] = "Update"
+	updatedConfig["UpdateTime"] = time.Now()
+	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, updatedConfig)
 	if err != nil {
 		log.Println(err)
 		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
@@ -263,7 +240,8 @@ func RemovemyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	err = RemoveTeamConfig(configM["Name"].(string), ConfigDBConf)
+	filter := bson.M{"Name": configM["Name"]}
+	err = RemoveDocument(filter, ConfigDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "nothing to delete" {
@@ -297,7 +275,7 @@ func AddApiUser(c *gin.Context) {
 		c.IndentedJSON(403, httpresponse{Status: false, Message: "Not authorized"})
 		return
 	}
-	user := Account{}
+	user := bson.M{}
 	err := c.BindJSON(&user)
 	if err != nil {
 		message := fmt.Sprint(err)
@@ -313,21 +291,22 @@ func AddApiUser(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	if user.Team == "" || user.Password == "" || user.Name == "" {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: "Team, Name, Password fields cannot be null"})
+	err = AddUserValidation(user)
+	if err != nil {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprintln(err)})
 		return
 	}
-	pwdCheck := PasswordComplexityCheck(user.Password)
+	pwdCheck := PasswordComplexityCheck(user["Password"].(string))
 	if !pwdCheck {
 		c.IndentedJSON(424, httpresponse{Status: false, Message: "Provided password doesn't meet required complexity. Please see documentation"})
 		return
 	}
-	user.Password = GetHash(user.Password)
-	err = AddTeamUser(user, UserDBConf)
+	user["Password"] = GetHash(user["Password"].(string))
+	err = AddDocument(user, UserDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if strings.Contains(message, "Team.Users index: name dup key") {
-			message = fmt.Sprintf("There is already have user with name %s", user.Name)
+			message = fmt.Sprintf("There is already have user with name %s", user["Name"])
 		} else {
 			apiuser, _, _ := c.Request.BasicAuth()
 			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: AddTeamUser, func: AddApiUser, Message: %s", apiuser, c.Request.Method, user, message)
@@ -374,7 +353,11 @@ func SetApiUser(c *gin.Context) {
 		return
 	}
 	user["Password"] = GetHash(user["Password"].(string))
-	err = SetTeamUser(user, UserDBConf)
+	filter := bson.M{"Name": user["Name"]}
+	update := bson.D{
+		{Key: "$set", Value: bson.M{"Password": user["Password"]}},
+	}
+	err = SetDocument(filter, update, UserDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "no document found to update" {
@@ -414,16 +397,17 @@ func RemoveApiUser(c *gin.Context) {
 		c.IndentedJSON(424, httpresponse{Status: false, Message: message})
 		return
 	}
-	myUser, ok := user["Name"]
-	if !ok || myUser == "" {
-		c.IndentedJSON(424, httpresponse{Status: false, Message: "Team, Name, Password fields cannot be null"})
+	val, ok := user["Name"]
+	if !ok || val == "" {
+		c.IndentedJSON(424, httpresponse{Status: false, Message: "Name field cannot be null"})
 		return
 	}
-	err := RemoveTeamUser(myUser.(string), UserDBConf)
+	filter := bson.M{"Name": user["Name"]}
+	err := RemoveDocument(filter, UserDBConf)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "nothing to delete" {
-			message = fmt.Sprintf("no user found with name: %s", myUser.(string))
+			message = fmt.Sprintf("no user found with name: %s", user["Name"].(string))
 		} else {
 			apiuser, _, _ := c.Request.BasicAuth()
 			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: RemoveTeamUser, func: RemoveApiUser, Message: %s", apiuser, c.Request.Method, user, message)
