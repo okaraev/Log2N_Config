@@ -126,6 +126,8 @@ func main() {
 		err := ValidateDBConfig(dbconf)
 		throw(err)
 	}
+	ConfigFM = FileManagerCreate(ConfigDBConf)
+	UserFM = FileManagerCreate(UserDBConf)
 	myBreaker.New(SendMessage)
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()

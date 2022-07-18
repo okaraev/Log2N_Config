@@ -12,6 +12,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+var ConfigFM FileManager
+var UserFM FileManager
+
 func ConverttoTeamConfigs(in interface{}) ([]TeamConfig, error) {
 	configs := []TeamConfig{}
 	bytes, err := json.Marshal(in)
@@ -66,7 +69,7 @@ func Authenticate(c *gin.Context) {
 		return
 	}
 	filter := bson.M{"Name": user}
-	userAccount, err := GetSingleDocument(filter, UserDBConf)
+	userAccount, err := UserFM.GetOne(filter)
 	if err != nil || userAccount["Password"] != GetHash(password) {
 		if err != nil {
 			log.Println(err)
@@ -100,7 +103,7 @@ func PasswordComplexityCheck(password string) bool {
 func SystemAuthorize(c *gin.Context) {
 	user, password, _ := c.Request.BasicAuth()
 	filter := bson.M{"Name": user}
-	userAccount, err := GetSingleDocument(filter, UserDBConf)
+	userAccount, err := UserFM.GetOne(filter)
 	if err != nil || userAccount["Team"] != "System" || userAccount["Password"] != GetHash(password) {
 		if err != nil {
 			log.Println(err)
@@ -113,7 +116,7 @@ func SystemAuthorize(c *gin.Context) {
 func GetmyConfig(c *gin.Context) {
 	team := c.Params.ByName("Team")
 	filter := bson.M{"Team": team}
-	configs, err := GetDocument(filter, ConfigDBConf)
+	configs, err := ConfigFM.Get(filter)
 	if err != nil {
 		c.IndentedJSON(424, httpresponse{Status: false, Message: fmt.Sprint(err)})
 		return
@@ -152,7 +155,7 @@ func AddmyConfig(c *gin.Context) {
 	}
 	configM["Team"] = team
 
-	err = AddDocument(configM, ConfigDBConf)
+	err = ConfigFM.Insert(configM)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if strings.Contains(message, "dup key") {
@@ -167,7 +170,6 @@ func AddmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	c.IndentedJSON(200, httpresponse{Status: true, Message: ""})
 	configM["UpdateType"] = "Add"
 	configM["UpdateTime"] = time.Now()
 	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
@@ -177,6 +179,7 @@ func AddmyConfig(c *gin.Context) {
 		c.Abort()
 		return
 	}
+	c.IndentedJSON(200, httpresponse{Status: true, Message: ""})
 }
 
 func SetmyConfig(c *gin.Context) {
@@ -208,7 +211,7 @@ func SetmyConfig(c *gin.Context) {
 	update := bson.D{
 		{Key: "$set", Value: configM},
 	}
-	updatedConfig, err := SetGetDocument(filter, update, ConfigDBConf)
+	updatedConfig, err := ConfigFM.UpdateAndGet(filter, update)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "no document found to update" {
@@ -262,7 +265,7 @@ func RemovemyConfig(c *gin.Context) {
 		return
 	}
 	filter := bson.M{"Name": configM["Name"]}
-	err = RemoveDocument(filter, ConfigDBConf)
+	err = ConfigFM.Delete(filter)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "nothing to delete" {
@@ -323,14 +326,14 @@ func AddApiUser(c *gin.Context) {
 		return
 	}
 	user["Password"] = GetHash(user["Password"].(string))
-	err = AddDocument(user, UserDBConf)
+	err = UserFM.Insert(user)
 	if err != nil {
 		message := fmt.Sprint(err)
-		if strings.Contains(message, "Team.Users index: name dup key") {
+		if strings.Contains(message, "dup key") {
 			message = fmt.Sprintf("There is already have user with name %s", user["Name"])
 		} else {
 			apiuser, _, _ := c.Request.BasicAuth()
-			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Body: %s, Stage: AddTeamUser, func: AddApiUser, Message: %s", apiuser, c.Request.Method, user, message)
+			errmessage := fmt.Sprintf("Api User: %s, Method: %s, Stage: AddTeamUser, func: AddApiUser, Message: %s", apiuser, c.Request.Method, message)
 			log.Println(errmessage)
 			message = "Unhandled exception. Please contact to Administrator"
 		}
@@ -378,7 +381,7 @@ func SetApiUser(c *gin.Context) {
 	update := bson.D{
 		{Key: "$set", Value: bson.M{"Password": user["Password"]}},
 	}
-	err = SetDocument(filter, update, UserDBConf)
+	err = UserFM.Update(filter, update)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "no document found to update" {
@@ -424,7 +427,7 @@ func RemoveApiUser(c *gin.Context) {
 		return
 	}
 	filter := bson.M{"Name": user["Name"]}
-	err := RemoveDocument(filter, UserDBConf)
+	err := UserFM.Delete(filter)
 	if err != nil {
 		message := fmt.Sprint(err)
 		if message == "nothing to delete" {
