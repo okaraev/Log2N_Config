@@ -172,7 +172,7 @@ func AddmyConfig(c *gin.Context) {
 	}
 	configM["UpdateType"] = "Add"
 	configM["UpdateTime"] = time.Now()
-	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
+	err = CM.Do(configM)
 	if err != nil {
 		log.Println(err)
 		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
@@ -230,7 +230,7 @@ func SetmyConfig(c *gin.Context) {
 	}
 	updatedConfig["UpdateType"] = "Update"
 	updatedConfig["UpdateTime"] = time.Now()
-	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, updatedConfig)
+	err = CM.Do(updatedConfig)
 	if err != nil {
 		log.Println(err)
 		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
@@ -284,7 +284,7 @@ func RemovemyConfig(c *gin.Context) {
 	configM["Team"] = team
 	configM["UpdateType"] = "Delete"
 	configM["UpdateTime"] = time.Now()
-	err = myBreaker.Do(GlobalConfig.QConnectionString, GlobalConfig.QName, configM)
+	err = CM.Do(configM)
 	if err != nil {
 		log.Println(err)
 		c.IndentedJSON(424, httpresponse{Status: false, Message: "Cannot process request"})
