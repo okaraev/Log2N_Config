@@ -10,9 +10,7 @@ import (
 )
 
 var GlobalConfig webconfig
-var UserDBConf DBConfig
-var ConfigDBConf DBConfig
-var myBreaker Breaker
+var CM Breaker
 
 type httpresponse struct {
 	Status  bool
@@ -31,10 +29,19 @@ type TeamConfig struct {
 	RetryCount            int      `bson:"RetryCount" json:"RetryCount"`
 }
 
-type webconfig struct {
-	DBConf            []DBConfig
+type qconfig struct {
 	QConnectionString string
 	QName             string
+}
+
+type webconfig struct {
+	DBConf []DBConfig
+	qconfig
+}
+
+type commonconfig struct {
+	DBConfig
+	qconfig
 }
 
 func GetHash(s string) string {
@@ -112,23 +119,35 @@ func getEnvs() error {
 func main() {
 	err := getEnvs()
 	throw(err)
-	UserDBConf = DBConfig{
-		Database:         GlobalConfig.DBConf[1].Database,
-		Collection:       GlobalConfig.DBConf[1].Collection,
-		Connectionstring: GlobalConfig.DBConf[1].Connectionstring,
-	}
-	ConfigDBConf = DBConfig{
-		Database:         GlobalConfig.DBConf[0].Database,
-		Collection:       GlobalConfig.DBConf[0].Collection,
-		Connectionstring: GlobalConfig.DBConf[0].Connectionstring,
-	}
 	for _, dbconf := range GlobalConfig.DBConf {
 		err := ValidateDBConfig(dbconf)
 		throw(err)
 	}
-	ConfigFM = FileManagerCreate(ConfigDBConf)
-	UserFM = FileManagerCreate(UserDBConf)
-	myBreaker.New(SendMessage)
+	common1 := commonconfig{
+		DBConfig{
+			Database:         GlobalConfig.DBConf[0].Database,
+			Collection:       GlobalConfig.DBConf[0].Collection,
+			Connectionstring: GlobalConfig.DBConf[0].Connectionstring,
+		},
+		qconfig{
+			QConnectionString: GlobalConfig.QConnectionString,
+			QName:             GlobalConfig.QName,
+		},
+	}
+	common2 := commonconfig{
+		DBConfig{
+			Database:         GlobalConfig.DBConf[1].Database,
+			Collection:       GlobalConfig.DBConf[1].Collection,
+			Connectionstring: GlobalConfig.DBConf[1].Connectionstring,
+		},
+		qconfig{
+			QConnectionString: GlobalConfig.QConnectionString,
+			QName:             GlobalConfig.QName,
+		},
+	}
+	ConfigFM = GetFileManagerDefaultInstace(common1)
+	UserFM = GetFileManagerDefaultInstace(common2)
+	CM = GetBreakerOverloadInstance(ConfigFM.SendMessage)
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/api/1/config", Authenticate, GetmyConfig)

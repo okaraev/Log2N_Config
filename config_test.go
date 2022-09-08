@@ -41,7 +41,7 @@ func TestPasswordComplexityCheck(t *testing.T) {
 	}
 }
 
-var FM FileManager = FileManagerCreate(ConfigDBConf)
+var FM FileManager = GetFileManagerDefaultInstace(commonconfig{})
 
 func MockGet(filter interface{}, config interface{}) ([]byte, error) {
 	bytes, err := json.Marshal(filter)
